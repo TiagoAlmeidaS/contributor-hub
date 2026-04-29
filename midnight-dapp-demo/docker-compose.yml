@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  proof-server:
+    image: midnightnetwork/proof-server:latest
+    container_name: midnight-proof-server
+    ports:
+      - "6300:6300"
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./contracts/managed:/app/contracts:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6300/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    container_name: vault-backend
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - NODE_ENV=development
+    depends_on:
+      proof-server:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src:ro
+    command: bun run src/index.ts
+
+  frontend:
+    build: ./frontend
+    container_name: vault-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:4000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/src:/app/src:ro
+    command: bun run dev --host 0.0.0.0
+
+networks:
+  default:
+    name: midnight-vault-network

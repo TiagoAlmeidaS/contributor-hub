@@ -1,0 +1,30 @@
+{
+  "name": "midnight-private-vault-demo",
+  "version": "1.0.0",
+  "description": "Full-stack Midnight dApp: Private Vault with Compact contract, TypeScript API, React frontend",
+  "type": "module",
+  "scripts": {
+    "compile:contract": "compact compile contracts/private-vault.compact contracts/managed",
+    "build": "bun build src/index.ts --outdir dist",
+    "dev": "bun run --hot src/index.ts",
+    "test": "bun test",
+    "deploy": "bun run src/deploy.ts",
+    "start:backend": "bun run backend/src/index.ts",
+    "start:frontend": "cd frontend && bun dev"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "^0.22.0",
+    "@midnight-ntwrk/midnight-js-types": "^3.0.0",
+    "@midnight-ntwrk/dapp-connector": "^3.0.0",
+    "express": "^4.18.0",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "bun-types": "latest",
+    "typescript": "^5.0.0"
+  },
+  "license": "Apache-2.0"
+}

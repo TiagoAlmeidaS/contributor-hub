@@ -1,0 +1,92 @@
+pragma language_version >= 0.22;
+
+// Private Vault Contract
+// A shielded token vault with privacy-preserving deposit/withdraw operations
+
+import token_lib from '@midnight/compact-token-lib';
+
+type Address = Opaque<"Address">;
+type Nullifier = Opaque<"Nullifier">;
+type ZKProof = Opaque<"ZKProof">;
+type ShieldedCoinInfo = Opaque<"ShieldedCoinInfo">;
+
+// Ledger state
+export ledger hasShieldedTokens: boolean;
+export ledger totalShieldedDeposits: Uint<64>;
+export ledger totalWithdrawals: Uint<64>;
+export ledger nullifiers: Map<Nullifier, boolean>;
+export ledger shieldedVault: token_lib.ZswapShieldedCoin<ShieldedCoinInfo>;
+
+// Initialize the vault (first deposit)
+export circuit initVault(coin: ShieldedCoinInfo): [] {
+    assert(!hasShieldedTokens, "vault already initialized");
+    token_lib.receiveShielded(token_lib.disclose(coin));
+    token_lib.shieldedVault.writeCoin(
+        token_lib.disclose(coin),
+        token_lib.right<token_lib.ZswapCoinPublicKey, token_lib.ContractAddress>(kernel.self())
+    );
+    hasShieldedTokens = true;
+    totalShieldedDeposits = totalShieldedDeposits + 1;
+}
+
+// Deposit additional tokens into existing vault
+export circuit deposit(coin: ShieldedCoinInfo): [] {
+    assert(hasShieldedTokens, "vault not initialized, call initVault first");
+    const pot = token_lib.shieldedVault;
+    token_lib.receiveShielded(token_lib.disclose(coin));
+    const merged = token_lib.mergeCoinImmediate(pot, token_lib.disclose(coin));
+    token_lib.shieldedVault.writeCoin(
+        merged,
+        token_lib.right<token_lib.ZswapCoinPublicKey, token_lib.ContractAddress>(kernel.self())
+    );
+    totalShieldedDeposits = totalShieldedDeposits + 1;
+}
+
+// Withdraw tokens from vault (with privacy via ZK proof)
+export circuit withdraw(
+    proof: ZKProof,
+    nullifier: Nullifier,
+    recipient: Address,
+    withdraw_amount: Uint<64>
+): [] {
+    // Verify ZK proof for the withdraw circuit
+    verify_proof(proof, withdraw_circuit, [nullifier, recipient, withdraw_amount]);
+
+    // Check nullifier hasn't been used (prevent double-spending)
+    assert !token_lib.ledger.nullifiers.contains(nullifier), "nullifier already used";
+
+    // Mark nullifier as spent
+    token_lib.ledger.nullifiers.insert(nullifier, true);
+
+    // Get vault coin and split into withdrawal + change
+    const vaultCoin = token_lib.shieldedVault.readCoin();
+    const result = token_lib.sendShielded(
+        vaultCoin,
+        token_lib.left<token_lib.ZswapCoinPublicKey, token_lib.ContractAddress>(recipient),
+        withdraw_amount
+    );
+
+    // Write change back to vault
+    token_lib.shieldedVault.writeCoin(
+        result.change,
+        token_lib.right<token_lib.ZswapCoinPublicKey, token_lib.ContractAddress>(kernel.self())
+    );
+
+    totalWithdrawals = totalWithdrawals + withdraw_amount;
+}
+
+// Read-only circuit to get vault state (public data)
+export circuit getVaultState(): [boolean, Uint<64>, Uint<64>] {
+    return [hasShieldedTokens, totalShieldedDeposits, totalWithdrawals];
+}
+
+// Helper circuit for withdraw ZK verification
+circuit withdraw_circuit(
+    nullifier: Nullifier,
+    recipient: Address,
+    amount: Uint<64>
+): [] {
+    // This circuit is used for ZK proof generation
+    // The nullifier ensures the withdrawal is unique
+    // Recipient and amount are public inputs to the proof
+}
